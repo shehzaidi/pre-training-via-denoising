@@ -66,9 +66,11 @@ class LNNP(LightningModule):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            pred, deriv = self(batch.z, batch.pos, batch.batch)
+            pred, noise_pred, deriv = self(batch.z, batch.pos, batch.batch)
 
-        loss_y, loss_dy = 0, 0
+        denoising_is_on = ("pos_target" in batch) and (self.hparams.denoising_weight > 0) and (noise_pred is not None)
+
+        loss_y, loss_dy, loss_pos = 0, 0, 0
         if self.hparams.derivative:
             if "y" not in batch:
                 # "use" both outputs of the model's forward function but discard the first
@@ -94,6 +96,10 @@ class LNNP(LightningModule):
                 self.losses[stage + "_dy"].append(loss_dy.detach())
 
         if "y" in batch:
+            if (noise_pred is not None) and not denoising_is_on:
+                # "use" both outputs of the model's forward (see comment above).
+                pred = pred + noise_pred.sum() * 0
+
             if batch.y.ndim == 1:
                 batch.y = batch.y.unsqueeze(1)
 
@@ -113,10 +119,28 @@ class LNNP(LightningModule):
             if self.hparams.energy_weight > 0:
                 self.losses[stage + "_y"].append(loss_y.detach())
 
+        if denoising_is_on:
+            if "y" not in batch:
+                # "use" both outputs of the model's forward (see comment above).
+                noise_pred = noise_pred + pred.sum() * 0
+                
+            normalized_pos_target = self.model.pos_normalizer(batch.pos_target)
+            loss_pos = loss_fn(noise_pred, normalized_pos_target)
+            self.losses[stage + "_pos"].append(loss_pos.detach())
+
         # total loss
-        loss = loss_y * self.hparams.energy_weight + loss_dy * self.hparams.force_weight
+        loss = loss_y * self.hparams.energy_weight + loss_dy * self.hparams.force_weight + loss_pos * self.hparams.denoising_weight
 
         self.losses[stage].append(loss.detach())
+
+        # Frequent per-batch logging for training
+        if stage == 'train':
+            train_metrics = {k + "_per_step": v[-1] for k, v in self.losses.items() if (k.startswith("train") and len(v) > 0)}
+            train_metrics['lr_per_step'] = self.trainer.optimizers[0].param_groups[0]["lr"]
+            train_metrics['step'] = self.trainer.global_step   
+            train_metrics['batch_pos_mean'] = batch.pos.mean().item()
+            self.log_dict(train_metrics, sync_dist=True)
+
         return loss
 
     def optimizer_step(self, *args, **kwargs):
@@ -145,6 +169,7 @@ class LNNP(LightningModule):
                 # than skipping test validation steps by returning None
                 self.trainer.reset_val_dataloader(self)
 
+    # TODO(shehzaidi): clean up this function, redundant logging if dy loss exists.
     def validation_epoch_end(self, validation_step_outputs):
         if not self.trainer.running_sanity_check:
             # construct dict of logged metrics
@@ -176,6 +201,31 @@ class LNNP(LightningModule):
                         self.losses["test_dy"]
                     ).mean()
 
+            if len(self.losses["train_y"]) > 0:
+                result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
+            if len(self.losses['val_y']) > 0:
+              result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
+            if len(self.losses["test_y"]) > 0:
+                result_dict["test_loss_y"] = torch.stack(
+                    self.losses["test_y"]
+                ).mean()
+
+            # if denoising is present, also log it
+            if len(self.losses["train_pos"]) > 0:
+                result_dict["train_loss_pos"] = torch.stack(
+                    self.losses["train_pos"]
+                ).mean()
+
+            if len(self.losses["val_pos"]) > 0:
+                result_dict["val_loss_pos"] = torch.stack(
+                    self.losses["val_pos"]
+                ).mean()
+
+            if len(self.losses["test_pos"]) > 0:
+                result_dict["test_loss_pos"] = torch.stack(
+                    self.losses["test_pos"]
+                ).mean()
+
             self.log_dict(result_dict, sync_dist=True)
         self._reset_losses_dict()
 
@@ -190,6 +240,9 @@ class LNNP(LightningModule):
             "train_dy": [],
             "val_dy": [],
             "test_dy": [],
+            "train_pos": [],
+            "val_pos": [],
+            "test_pos": [],
         }
 
     def _reset_ema_dict(self):

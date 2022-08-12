@@ -28,10 +28,21 @@ class DataModule(LightningDataModule):
                     self.hparams["force_files"],
                 )
             else:
-                self.dataset = getattr(datasets, self.hparams["dataset"])(
-                    self.hparams["dataset_root"],
-                    dataset_arg=self.hparams["dataset_arg"],
-                )
+                if self.hparams['position_noise_scale'] > 0.:
+                    def transform(data):
+                        noise = torch.randn_like(data.pos) * self.hparams['position_noise_scale']
+                        data.pos_target = noise
+                        data.pos = data.pos + noise
+                        return data
+                else:
+                    transform = None
+
+                dataset_factory = lambda t: getattr(datasets, self.hparams["dataset"])(self.hparams["dataset_root"], dataset_arg=self.hparams["dataset_arg"], transform=t)
+
+                # Noisy version of dataset
+                self.dataset_maybe_noisy = dataset_factory(transform)
+                # Clean version of dataset
+                self.dataset = dataset_factory(None)
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
@@ -46,7 +57,7 @@ class DataModule(LightningDataModule):
             f"train {len(self.idx_train)}, val {len(self.idx_val)}, test {len(self.idx_test)}"
         )
 
-        self.train_dataset = Subset(self.dataset, self.idx_train)
+        self.train_dataset = Subset(self.dataset_maybe_noisy, self.idx_train)
         self.val_dataset = Subset(self.dataset, self.idx_val)
         self.test_dataset = Subset(self.dataset, self.idx_test)
 

@@ -1,5 +1,5 @@
 import re
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import torch
 from torch.autograd import grad
 from torch import nn
@@ -82,6 +82,13 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["embedding_dimension"], args["activation"]
     )
 
+    # create the denoising output network
+    output_model_noise = None
+    if args['output_model_noise'] is not None:
+        output_model_noise = getattr(output_modules, output_prefix + args["output_model_noise"])(
+            args["embedding_dimension"], args["activation"],
+        )
+        
     # combine representation and output network
     model = TorchMD_Net(
         representation_model,
@@ -91,6 +98,8 @@ def create_model(args, prior_model=None, mean=None, std=None):
         mean=mean,
         std=std,
         derivative=args["derivative"],
+        output_model_noise=output_model_noise,
+        position_noise_scale=args['position_noise_scale'],
     )
     return model
 
@@ -122,6 +131,8 @@ class TorchMD_Net(nn.Module):
         mean=None,
         std=None,
         derivative=False,
+        output_model_noise=None,
+        position_noise_scale=0.,
     ):
         super(TorchMD_Net, self).__init__()
         self.representation_model = representation_model
@@ -139,11 +150,16 @@ class TorchMD_Net(nn.Module):
 
         self.reduce_op = reduce_op
         self.derivative = derivative
+        self.output_model_noise = output_model_noise        
+        self.position_noise_scale = position_noise_scale
 
         mean = torch.scalar_tensor(0) if mean is None else mean
         self.register_buffer("mean", mean)
         std = torch.scalar_tensor(1) if std is None else std
         self.register_buffer("std", std)
+
+        if self.position_noise_scale > 0:
+            self.pos_normalizer = AccumulatedNormalization(accumulator_shape=(3,))
 
         self.reset_parameters()
 
@@ -162,6 +178,11 @@ class TorchMD_Net(nn.Module):
 
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(z, pos, batch=batch)
+
+        # predict noise
+        noise_pred = None
+        if self.output_model_noise is not None:
+            noise_pred = self.output_model_noise.pre_reduce(x, v, z, pos, batch) 
 
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
@@ -196,6 +217,45 @@ class TorchMD_Net(nn.Module):
             )[0]
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")
-            return out, -dy
+            return out, noise_pred, -dy
         # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return out, None
+        return out, noise_pred, None
+
+
+class AccumulatedNormalization(nn.Module):
+    """Running normalization of a tensor."""
+    def __init__(self, accumulator_shape: Tuple[int, ...], epsilon: float = 1e-8):
+        super(AccumulatedNormalization, self).__init__()
+
+        self._epsilon = epsilon
+        self.register_buffer("acc_sum", torch.zeros(accumulator_shape))
+        self.register_buffer("acc_squared_sum", torch.zeros(accumulator_shape))
+        self.register_buffer("acc_count", torch.zeros((1,)))
+        self.register_buffer("num_accumulations", torch.zeros((1,)))
+
+    def update_statistics(self, batch: torch.Tensor):
+        batch_size = batch.shape[0]
+        self.acc_sum += batch.sum(dim=0)
+        self.acc_squared_sum += batch.pow(2).sum(dim=0)
+        self.acc_count += batch_size
+        self.num_accumulations += 1
+
+    @property
+    def acc_count_safe(self):
+        return self.acc_count.clamp(min=1)
+
+    @property
+    def mean(self):
+        return self.acc_sum / self.acc_count_safe
+
+    @property
+    def std(self):
+        return torch.sqrt(
+            (self.acc_squared_sum / self.acc_count_safe) - self.mean.pow(2)
+        ).clamp(min=self._epsilon)
+
+    def forward(self, batch: torch.Tensor):
+        if self.training:
+            self.update_statistics(batch)
+        return ((batch - self.mean) / self.std)
+

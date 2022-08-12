@@ -57,11 +57,14 @@ def get_args():
     parser.add_argument('--force-files', default=None, type=str, help='Custom force files glob')
     parser.add_argument('--energy-weight', default=1.0, type=float, help='Weighting factor for energies in the loss function')
     parser.add_argument('--force-weight', default=1.0, type=float, help='Weighting factor for forces in the loss function')
+    parser.add_argument('--position-noise-scale', default=0., type=float, help='Scale of Gaussian noise added to positions.')
+    parser.add_argument('--denoising-weight', default=0., type=float, help='Weighting factor for denoising in the loss function.')
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
+    parser.add_argument('--output-model-noise', type=str, default=None, choices=output_modules.__all__ + ['VectorOutput'], help='The type of output model for denoising')
 
     # architectural args
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
