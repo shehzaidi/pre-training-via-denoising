@@ -133,3 +133,10 @@ dmypy.json
 
 # temp directories
 logs/
+
+wandb/
+tmp/
+lightning_logs/
+data/
+experiments/
+plots/

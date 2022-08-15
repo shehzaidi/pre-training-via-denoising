@@ -5,7 +5,7 @@ import logging
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
 from pytorch_lightning.plugins import DDPPlugin
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
@@ -13,7 +13,8 @@ from torchmdnet.data import DataModule
 from torchmdnet.models import output_modules
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
-
+from pathlib import Path
+import wandb
 
 def get_args():
     # fmt: off
@@ -46,6 +47,8 @@ def get_args():
     parser.add_argument('--distributed-backend', default='ddp', help='Distributed backend: dp, ddp, ddp2')
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
+    parser.add_argument('--wandb-notes', default="", type=str, help='Notes passed to wandb experiment.')
+    parser.add_argument('--job-id', default="auto", type=str, help='Job ID. If auto, pick the next available numeric job id.')
 
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
@@ -94,6 +97,16 @@ def get_args():
 
     args = parser.parse_args()
 
+    if args.job_id == "auto":
+        if Path(args.log_dir).exists() and len(os.listdir(args.log_dir)) > 0:        
+            next_job_id = str(max([int(x.name) for x in Path(args.log_dir).iterdir() if x.name.isnumeric()])+1)
+        else:
+            next_job_id = "1"
+        args.job_id = next_job_id
+
+    args.log_dir = str(Path(args.log_dir, args.job_id))
+    Path(args.log_dir).mkdir(parents=True, exist_ok=True)
+
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
@@ -112,6 +125,7 @@ def get_args():
 def main():
     args = get_args()
     pl.seed_everything(args.seed, workers=True)
+    print(args)
 
     # initialize data module
     data = DataModule(args)
@@ -144,6 +158,10 @@ def main():
         args.log_dir, name="tensorbord", version="", default_hp_metric=False
     )
     csv_logger = CSVLogger(args.log_dir, name="", version="")
+    wandb_logger = WandbLogger(name=args.job_id, project='pre-training-via-denoising', notes=args.wandb_notes, settings=wandb.Settings(start_method='fork', code_dir="."))
+
+    wandb_logger.experiment # runs wandb.init, so then code can be logged next
+    wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py") or path.endswith(".yaml"))
 
     ddp_plugin = None
     if "ddp" in args.distributed_backend:
@@ -158,7 +176,7 @@ def main():
         auto_lr_find=False,
         resume_from_checkpoint=args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
-        logger=[tb_logger, csv_logger],
+        logger=[tb_logger, csv_logger, wandb_logger],
         reload_dataloaders_every_epoch=False,
         precision=args.precision,
         plugins=[ddp_plugin],
