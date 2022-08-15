@@ -25,10 +25,12 @@ inference_batch_size: 128
 load_model: null
 log_dir: experiments/
 lr: 0.0004
+lr_schedule: reduce_on_plateau
 lr_factor: 0.8
 lr_min: 1.0e-07
 lr_patience: 15
 lr_warmup_steps: 10000
+lr_cosine_length: 300000
 max_num_neighbors: 32
 max_z: 100
 model: equivariant-transformer

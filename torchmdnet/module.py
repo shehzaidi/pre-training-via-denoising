@@ -1,6 +1,6 @@
 import torch
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from torch.nn.functional import mse_loss, l1_loss
 
 from pytorch_lightning import LightningModule
@@ -31,19 +31,29 @@ class LNNP(LightningModule):
             lr=self.hparams.lr,
             weight_decay=self.hparams.weight_decay,
         )
-        scheduler = ReduceLROnPlateau(
-            optimizer,
-            "min",
-            factor=self.hparams.lr_factor,
-            patience=self.hparams.lr_patience,
-            min_lr=self.hparams.lr_min,
-        )
-        lr_scheduler = {
-            "scheduler": scheduler,
-            "monitor": "val_loss",
-            "interval": "epoch",
-            "frequency": 1,
-        }
+        if self.hparams.lr_schedule == 'cosine':
+            scheduler = CosineAnnealingLR(optimizer, self.hparams.lr_cosine_length)
+            lr_scheduler = {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            }
+        elif self.hparams.lr_schedule == 'reduce_on_plateau':
+            scheduler = ReduceLROnPlateau(
+                optimizer,
+                "min",
+                factor=self.hparams.lr_factor,
+                patience=self.hparams.lr_patience,
+                min_lr=self.hparams.lr_min,
+            )
+            lr_scheduler = {
+                "scheduler": scheduler,
+                "monitor": "val_loss",
+                "interval": "epoch",
+                "frequency": 1,
+            }
+        else:
+            raise ValueError(f"Unknown lr_schedule: {self.hparams.lr_schedule}")
         return [optimizer], [lr_scheduler]
 
     def forward(self, z, pos, batch=None):
