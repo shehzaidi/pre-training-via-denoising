@@ -58,8 +58,14 @@ class DataModule(LightningDataModule):
         )
 
         self.train_dataset = Subset(self.dataset_maybe_noisy, self.idx_train)
-        self.val_dataset = Subset(self.dataset, self.idx_val)
-        self.test_dataset = Subset(self.dataset, self.idx_test)
+
+        # If denoising is the only task, test/val datasets are also used for measuring denoising performance.
+        if self.hparams['denoising_only']:
+            self.val_dataset = Subset(self.dataset_maybe_noisy, self.idx_val)
+            self.test_dataset = Subset(self.dataset_maybe_noisy, self.idx_test)            
+        else:
+            self.val_dataset = Subset(self.dataset, self.idx_val)
+            self.test_dataset = Subset(self.dataset, self.idx_test)
 
         if self.hparams["standardize"]:
             self._standardize()
