@@ -37,6 +37,7 @@ model: equivariant-transformer
 neighbor_embedding: true
 ngpus: -1
 num_epochs: 30
+num_steps: 400000
 num_heads: 8
 num_layers: 8
 num_nodes: 1

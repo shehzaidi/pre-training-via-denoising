@@ -22,6 +22,7 @@ def get_args():
     parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint')  # keep first
     parser.add_argument('--conf', '-c', type=open, action=LoadFromFile, help='Configuration yaml file')  # keep second
     parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
+    parser.add_argument('--num-steps', default=None, type=int, help='Maximum number of gradient steps.')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
@@ -154,7 +155,8 @@ def main():
         monitor="val_loss",
         save_top_k=10,  # -1 to save all
         period=args.save_interval,
-        filename="{epoch}-{val_loss:.4f}-{test_loss:.4f}",
+        filename="{step}-{epoch}-{val_loss:.4f}-{test_loss:.4f}-{train_per_step:.4f}",
+        save_last=True,
     )
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
@@ -173,6 +175,7 @@ def main():
 
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
+        max_steps=args.num_steps,
         gpus=args.ngpus,
         num_nodes=args.num_nodes,
         accelerator=args.distributed_backend,
