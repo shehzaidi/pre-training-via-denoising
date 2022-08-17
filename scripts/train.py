@@ -51,6 +51,7 @@ def get_args():
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
     parser.add_argument('--wandb-notes', default="", type=str, help='Notes passed to wandb experiment.')
     parser.add_argument('--job-id', default="auto", type=str, help='Job ID. If auto, pick the next available numeric job id.')
+    parser.add_argument('--pretrained-model', default=None, type=str, help='Pre-trained weights checkpoint.')
 
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')

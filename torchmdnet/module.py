@@ -14,6 +14,8 @@ class LNNP(LightningModule):
 
         if self.hparams.load_model:
             self.model = load_model(self.hparams.load_model, args=self.hparams)
+        elif self.hparams.pretrained_model:
+            self.model = load_model(self.hparams.pretrained_model, args=self.hparams, mean=mean, std=std)
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
 

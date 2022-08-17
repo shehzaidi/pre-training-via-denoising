@@ -23,6 +23,7 @@ force_files: null
 force_weight: 1.0
 inference_batch_size: 128
 load_model: null
+pretrained_model: null
 log_dir: experiments/
 lr: 0.0004
 lr_schedule: reduce_on_plateau

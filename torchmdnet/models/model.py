@@ -104,7 +104,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
-def load_model(filepath, args=None, device="cpu", **kwargs):
+def load_model(filepath, args=None, device="cpu", mean=None, std=None, **kwargs):
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
         args = ckpt["hyper_parameters"]
@@ -117,7 +117,18 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     model = create_model(args)
 
     state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
-    model.load_state_dict(state_dict)
+    loading_return = model.load_state_dict(state_dict, strict=False)
+    
+    if len(loading_return.unexpected_keys) > 0:
+        # Should only happen if not applying denoising during fine-tuning.
+        assert all(("output_model_noise" in k or "pos_normalizer" in k) for k in loading_return.unexpected_keys)
+    assert len(loading_return.missing_keys) == 0, f"Missing keys: {loading_return.missing_keys}"
+
+    if mean:
+        model.mean = mean
+    if std:
+        model.std = std
+
     return model.to(device)
 
 
