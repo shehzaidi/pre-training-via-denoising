@@ -62,5 +62,6 @@ output_model_noise: VectorOutput
 position_noise_scale: 0.04
 denoising_weight: 1.0
 denoising_only: true
+layernorm_on_vec: null
 wandb_notes: ""
 job_id: auto

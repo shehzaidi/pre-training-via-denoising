@@ -12,7 +12,7 @@ dataset_root: data/qm9
 derivative: false
 distance_influence: both
 distributed_backend: ddp
-early_stopping_patience: 150
+early_stopping_patience: 1500
 ema_alpha_dy: 1.0
 ema_alpha_y: 1.0
 embed_files: null
@@ -62,5 +62,6 @@ weight_decay: 0.0
 output_model_noise: null
 position_noise_scale: 0.
 denoising_weight: 0.
+layernorm_on_vec: null
 wandb_notes: ""
 job_id: auto

@@ -10,6 +10,7 @@ from torchmdnet.models.utils import (
     rbf_class_mapping,
     act_class_mapping,
 )
+from torch.nn.parameter import Parameter
 
 
 class TorchMD_ET(nn.Module):
@@ -67,6 +68,7 @@ class TorchMD_ET(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        layernorm_on_vec=None,
     ):
         super(TorchMD_ET, self).__init__()
 
@@ -97,6 +99,7 @@ class TorchMD_ET(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
+        self.layernorm_on_vec = layernorm_on_vec
 
         act_class = act_class_mapping[activation]
 
@@ -135,7 +138,12 @@ class TorchMD_ET(nn.Module):
             self.attention_layers.append(layer)
 
         self.out_norm = nn.LayerNorm(hidden_channels)
-
+        if self.layernorm_on_vec:
+            if self.layernorm_on_vec == "whitened":
+                self.out_norm_vec = EquivariantLayerNorm(hidden_channels)
+            else:
+                raise ValueError(f"{self.layernorm_on_vec} not recognized.")
+            
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -146,6 +154,8 @@ class TorchMD_ET(nn.Module):
         for attn in self.attention_layers:
             attn.reset_parameters()
         self.out_norm.reset_parameters()
+        if self.layernorm_on_vec:
+            self.out_norm_vec.reset_parameters()
 
     def forward(self, z, pos, batch):
         x = self.embedding(z)
@@ -169,6 +179,8 @@ class TorchMD_ET(nn.Module):
             x = x + dx
             vec = vec + dvec
         x = self.out_norm(x)
+        if self.layernorm_on_vec:
+            vec = self.out_norm_vec(vec)
 
         return x, vec, z, pos, batch
 
@@ -335,3 +347,93 @@ class EquivariantMultiHeadAttention(MessagePassing):
         self, inputs: Tuple[torch.Tensor, torch.Tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         return inputs
+
+
+class EquivariantLayerNorm(nn.Module):
+    r"""Rotationally-equivariant Vector Layer Normalization
+    Expects inputs with shape (N, n, d), where N is batch size, n is vector dimension, d is width/number of vectors.
+    """
+    __constants__ = ["normalized_shape", "elementwise_linear"]
+    normalized_shape: Tuple[int, ...]
+    eps: float
+    elementwise_linear: bool
+
+    def __init__(
+        self,
+        normalized_shape: int,
+        eps: float = 1e-5,
+        elementwise_linear: bool = True,
+        device=None,
+        dtype=None,
+    ) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super(EquivariantLayerNorm, self).__init__()
+
+        self.normalized_shape = (int(normalized_shape),)
+        self.eps = eps
+        self.elementwise_linear = elementwise_linear
+        if self.elementwise_linear:
+            self.weight = Parameter(
+                torch.empty(self.normalized_shape, **factory_kwargs)
+            )
+        else:
+            self.register_parameter("weight", None) # Without bias term to preserve equivariance!
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        if self.elementwise_linear:
+            nn.init.ones_(self.weight)
+
+    def mean_center(self, input):
+        return input - input.mean(-1, keepdim=True)
+
+    def covariance(self, input):
+        return 1 / self.normalized_shape[0] * input @ input.transpose(-1, -2)
+
+    def symsqrtinv(self, matrix):
+        """Compute the inverse square root of a positive definite matrix.
+
+        Based on https://github.com/pytorch/pytorch/issues/25481
+        """
+        _, s, v = matrix.svd()
+        good = (
+            s > s.max(-1, True).values * s.size(-1) * torch.finfo(s.dtype).eps
+        )
+        components = good.sum(-1)
+        common = components.max()
+        unbalanced = common != components.min()
+        if common < s.size(-1):
+            s = s[..., :common]
+            v = v[..., :common]
+            if unbalanced:
+                good = good[..., :common]
+        if unbalanced:
+            s = s.where(good, torch.zeros((), device=s.device, dtype=s.dtype))
+        return (v * 1 / torch.sqrt(s + self.eps).unsqueeze(-2)) @ v.transpose(
+            -2, -1
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        input = input.to(torch.float64) # Need double precision for accurate inversion.
+        input = self.mean_center(input)
+        # We use different diagonal elements in case input matrix is approximately zero,
+        # in which case all singular values are equal which is problematic for backprop.
+        # See e.g. https://pytorch.org/docs/stable/generated/torch.svd.html
+        reg_matrix = (
+            torch.diag(torch.tensor([1.0, 2.0, 3.0]))
+            .unsqueeze(0)
+            .to(input.device)
+            .type(input.dtype)
+        )
+        covar = self.covariance(input) + self.eps * reg_matrix
+        covar_sqrtinv = self.symsqrtinv(covar)
+        return (covar_sqrtinv @ input).to(
+            self.weight.dtype
+        ) * self.weight.reshape(1, 1, self.normalized_shape[0])
+
+    def extra_repr(self) -> str:
+        return (
+            "{normalized_shape}, "
+            "elementwise_linear={elementwise_linear}".format(**self.__dict__)
+        )

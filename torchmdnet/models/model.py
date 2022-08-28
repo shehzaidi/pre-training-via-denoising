@@ -52,6 +52,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             attn_activation=args["attn_activation"],
             num_heads=args["num_heads"],
             distance_influence=args["distance_influence"],
+            layernorm_on_vec=args["layernorm_on_vec"],
             **shared_args,
         )
     else:
