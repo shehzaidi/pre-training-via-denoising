@@ -1,72 +1,72 @@
-# TorchMD-NET
+# Pre-training via Denoising for Molecular Property Prediction
 
-TorchMD-NET provides state-of-the-art graph neural networks and equivariant transformer neural networks potentials for learning molecular potentials. It offers an efficient and fast implementation and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/) and [OpenMM](https://www.openmm.org). See the full paper at https://arxiv.org/abs/2202.02541.
+Pre-training via denoising is a powerful representation learning technique for molecules. This repository contains the official implementation of pre-training for the TorchMD-NET architecture, built off the [original TorchMD-NET repository](https://github.com/torchmd/torchmd-net), based on the paper:
 
-## Installation
+[Pre-training via Denoising for Molecular Property Prediction](https://arxiv.org/abs/2206.00133)
+
+by [Sheheryar Zaidi*](https://shehzaidi.github.io/), [Michael Schaarschmidt*](https://www.michaelschaarschmidt.com/), [James Martens](http://www.cs.toronto.edu/~jmartens/), [Hyunjik Kim](https://hyunjik11.github.io/), [Yee Whye Teh](http://www.stats.ox.ac.uk/~teh/), [Alvaro Sanchez Gonzalez](https://scholar.google.co.uk/citations?user=d1oQ8NcAAAAJ&hl=en), [Peter Battaglia](https://scholar.google.com/citations?user=nQ7Ij30AAAAJ&hl=en), [Razvan Pascanu](https://sites.google.com/corp/view/razp), [Jonathan Godwin](https://scholar.google.co.uk/citations?user=TEYiFIsAAAAJ&hl=en&oi=sra).
+
+## How to use this code
+
+### Install dependencies
 
 Clone the repository:
 ```
-git clone https://github.com/torchmd/torchmd-net.git
-cd torchmd-net
+git clone https://github.com/shehzaidi/pre-training-via-denoising.git
+cd pre-training-via-denoising
 ```
 
-Create a Conda environment and activate it:
+Create a virtual environment containing the dependencies and activate it:
 ```
 conda env create -f environment.yml
-conda activate torchmd-net
+conda activate pvd
 ```
 
-Install TorchMD-NET into the Conda environment:
+Install the package into the environment:
 ```
 pip install -e .
 ```
+### Pre-training on PCQM4Mv2
 
-## Performance
-The TorchMD-NET equivariant Transformer (ET) is competitive with previous methods on the MD17 benchmark dataset.
-
-
-![image](https://user-images.githubusercontent.com/36135990/146565069-a3c03827-5ee2-44b0-89b0-9e02e129b6df.png)
-
-
-## Usage
-Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. An example configuration file for a TorchMD Graph Network can be found at [examples/graph-network.yaml](https://github.com/compsciencelab/torchmd-net/blob/main/examples/graph-network.yaml). For an example on how to train the network on the QM9 dataset, see [examples/train_GN_QM9.sh](https://github.com/compsciencelab/torchmd-net/blob/main/examples/train_GN_QM9.sh). GPUs can be selected by their index by listing the device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1 uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
-```
-mkdir output
-CUDA_VISIBLE_DEVICES=0 python torchmd-net/scripts/torchmd_train.py --conf torchmd-net/examples/graph-network.yaml --dataset QM9 --log-dir output/
-```
-
-## Creating a new dataset
-If you want to train on custom data, first have a look at `torchmdnet.datasets.Custom`, which provides functionalities for 
-loading a NumPy dataset consisting of atom types and coordinates, as well as energies, forces or both as the labels.
-Alternatively, you can implement a custom class according to the torch-geometric way of implementing a dataset. That is, 
-derive the `Dataset` or `InMemoryDataset` class and implement the necessary functions (more info [here](https://pytorch-geometric.readthedocs.io/en/latest/notes/create_dataset.html#creating-your-own-datasets)). The dataset must return torch-geometric `Data` 
-objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `dy` (derivative of the label w.r.t atom coordinates) or both.
-
-### Custom prior models
-In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model. This can be
-done by implementing a new prior model class in `torchmdnet.priors` and adding the argument `--prior-model <PriorModelName>`.
-As an example, have a look at `torchmdnet.priors.Atomref`.
-
-## Multi-Node Training
-__Currently does not work with the most recent PyTorch Lightning version. Tested up to pytorch-lightning==1.2.10__
-
-In order to train models on multiple nodes some environment variables have to be set, which provide all necessary information to PyTorch Lightning. In the following we provide an example bash script to start training on two machines with two GPUs each. The script has to be started once on each node. Once [`train.py`](https://github.com/compsciencelab/torchmd-net/blob/main/scripts/train.py) is started on all nodes, a network connection between the nodes will be established using NCCL.
-
-In addition to the environment variables the argument `--num-nodes` has to be specified with the number of nodes involved during training.
+The model is pre-trained on the [PCQM4Mv2]() dataset, which contains over 3 million molecular structures at equilibrium. Run the following command to pre-train the architecture first. Note that this will download and pre-process the PCQM4Mv2 dataset when run for the first time, which can take a couple of hours depending on the machine.
 
 ```
-export NODE_RANK=0
-export MASTER_ADDR=hostname1
-export MASTER_PORT=12910
-
-mkdir -p output
-CUDA_VISIBLE_DEVICES=0,1 python torchmd-net/scripts/train.py --conf torchmd-net/examples/graph-network.yaml --num-nodes 2 --log-dir output/
+python scripts/train.py --conf examples/ET-PCQM4MV2.yaml --layernorm-on-vec whitened --job-id pretraining
 ```
 
-- `NODE_RANK` : Integer indicating the node index. Must be `0` for the main node and incremented by one for each additional node.
-- `MASTER_ADDR` : Hostname or IP address of the main node. The same for all involved nodes.
-- `MASTER_PORT` : A free network port for communication between nodes. PyTorch Lightning suggests port `12910` as a default.
+The option `--layernorm-on-vec whitened` includes an optional equivariant whitening-based layer norm, which stabilizes denoising. The pre-trained model checkpoint will be in `./experiments/pretraining`.
 
-### Known Limitations
-- Due to the way PyTorch Lightning calculates the number of required DDP processes, all nodes must use the same number of GPUs. Otherwise training will not start or crash.
-- We observe a 50x decrease in performance when mixing nodes with different GPU architectures (tested with RTX 2080 Ti and RTX 3090).
+### Fine-tuning on QM9
+
+To fine-tune the model for HOMO/LUMO prediction on QM9, run the following command, specifying `homo`/`lumo` and the path to the pre-trained checkpoint:
+
+```bash
+python scripts/train.py --conf examples/ET-QM9-FT.yaml --layernorm-on-vec whitened --job-id finetuning --dataset-arg <homo/lumo> --pretrained-model <path to checkpoint>
+```
+
+The fine-tuned model achieves state-of-the-art results for HOMO/LUMO on QM9:
+
+| **Target** | **Test MAE (meV)** |
+|------------|:------------------:|
+| HOMO       |        15.5        |
+| LUMO       |        13.2        |
+
+
+### Data Parallelism 
+
+By default, the code will use all available GPUs to train the model. We used three GPUs for pre-training and two GPUs for fine-tuning (NVIDIA RTX 2080Ti), which can be set by prefixing the commands above with e.g. `CUDA_VISIBLE_DEVICES=0,1,2` to use three GPUs.
+
+## Citation
+
+If you have found this work useful, please consider using the following citation:
+
+```bib
+@misc{zaidi2022pretraining,
+      title={Pre-training via Denoising for Molecular Property Prediction}, 
+      author={Sheheryar Zaidi and Michael Schaarschmidt and James Martens and Hyunjik Kim and Yee Whye Teh and Alvaro Sanchez-Gonzalez and Peter Battaglia and Razvan Pascanu and Jonathan Godwin},
+      year={2022},
+      eprint={2206.00133},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
