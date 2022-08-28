@@ -1,3 +1,4 @@
+import numpy as np  # sometimes needed to avoid mkl-service error
 import sys
 import os
 import argparse
@@ -7,6 +8,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger, WandbLogger
 from pytorch_lightning.plugins import DDPPlugin
+from pytorch_lightning.utilities import rank_zero_only
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -103,6 +105,7 @@ def get_args():
     args = parser.parse_args()
 
     if args.job_id == "auto":
+        assert len(os.environ['CUDA_VISIBLE_DEVICES'].split(',')) == 1, "Might be problematic with DDP."
         if Path(args.log_dir).exists() and len(os.listdir(args.log_dir)) > 0:        
             next_job_id = str(max([int(x.name) for x in Path(args.log_dir).iterdir() if x.name.isnumeric()])+1)
         else:
@@ -166,8 +169,12 @@ def main():
     csv_logger = CSVLogger(args.log_dir, name="", version="")
     wandb_logger = WandbLogger(name=args.job_id, project='pre-training-via-denoising', notes=args.wandb_notes, settings=wandb.Settings(start_method='fork', code_dir="."))
 
-    wandb_logger.experiment # runs wandb.init, so then code can be logged next
-    wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py") or path.endswith(".yaml"))
+    @rank_zero_only
+    def log_code():
+        wandb_logger.experiment # runs wandb.init, so then code can be logged next
+        wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py") or path.endswith(".yaml"))
+
+    log_code()
 
     ddp_plugin = None
     if "ddp" in args.distributed_backend:
