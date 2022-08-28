@@ -56,6 +56,14 @@ The fine-tuned model achieves state-of-the-art results for HOMO/LUMO on QM9:
 
 By default, the code will use all available GPUs to train the model. We used three GPUs for pre-training and two GPUs for fine-tuning (NVIDIA RTX 2080Ti), which can be set by prefixing the commands above with e.g. `CUDA_VISIBLE_DEVICES=0,1,2` to use three GPUs.
 
+## Guide for implementing pre-training via denoising
+
+It is straightforward to implement denoising in an existing codebase. There are broadly three steps:
+
+1. Add noise to the input molecular structures in the dataset. See [here](https://github.com/shehzaidi/pre-training-via-denoising/blob/c545b76e0242d89e7f88a444c06e26cf7fd0d6c1/torchmdnet/data.py#L32).
+2. Add an output module to the architecture for predicting the noise. See [here](https://github.com/shehzaidi/pre-training-via-denoising/blob/c545b76e0242d89e7f88a444c06e26cf7fd0d6c1/torchmdnet/models/model.py#L146).
+3. Use (or augment an existing loss with) an L2 loss for training the model. See [here](https://github.com/shehzaidi/pre-training-via-denoising/blob/c545b76e0242d89e7f88a444c06e26cf7fd0d6c1/torchmdnet/module.py#L144).
+
 ## Citation
 
 If you have found this work useful, please consider using the following citation:
