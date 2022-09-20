@@ -1,10 +1,12 @@
 # Pre-training via Denoising for Molecular Property Prediction
 
-Pre-training via denoising is a powerful representation learning technique for molecules. This repository contains the official implementation of pre-training for the TorchMD-NET architecture, built off the [original TorchMD-NET repository](https://github.com/torchmd/torchmd-net), based on the paper:
+This is the official implementation for the paper:
 
 [Pre-training via Denoising for Molecular Property Prediction](https://arxiv.org/abs/2206.00133)
 
 by [Sheheryar Zaidi*](https://shehzaidi.github.io/), [Michael Schaarschmidt*](https://www.michaelschaarschmidt.com/), [James Martens](http://www.cs.toronto.edu/~jmartens/), [Hyunjik Kim](https://hyunjik11.github.io/), [Yee Whye Teh](http://www.stats.ox.ac.uk/~teh/), [Alvaro Sanchez Gonzalez](https://scholar.google.co.uk/citations?user=d1oQ8NcAAAAJ&hl=en), [Peter Battaglia](https://scholar.google.com/citations?user=nQ7Ij30AAAAJ&hl=en), [Razvan Pascanu](https://sites.google.com/corp/view/razp), [Jonathan Godwin](https://scholar.google.co.uk/citations?user=TEYiFIsAAAAJ&hl=en&oi=sra).
+
+Pre-training via denoising is a powerful representation learning technique for molecules. This repository contains an implementation of pre-training for the TorchMD-NET architecture, built off the [original TorchMD-NET repository](https://github.com/torchmd/torchmd-net).
 
 <img src="./assets/pvd.gif" alt="drawing" width="500"/>
 
