@@ -38,7 +38,7 @@ The model is pre-trained on the [PCQM4Mv2]() dataset, which contains over 3 mill
 python scripts/train.py --conf examples/ET-PCQM4MV2.yaml --layernorm-on-vec whitened --job-id pretraining
 ```
 
-The option `--layernorm-on-vec whitened` includes an optional equivariant whitening-based layer norm, which stabilizes denoising. The pre-trained model checkpoint will be in `./experiments/pretraining`.
+The option `--layernorm-on-vec whitened` includes an optional equivariant whitening-based layer norm, which stabilizes denoising. The pre-trained model checkpoint will be in `./experiments/pretraining`. A pre-trained checkpoint is included in this repo at `checkpoints/denoised-pcqm4mv2.ckpt`.
 
 ### Fine-tuning on QM9
 
