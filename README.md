@@ -73,12 +73,12 @@ It is straightforward to implement denoising in an existing codebase. There are 
 If you have found this work useful, please consider using the following citation:
 
 ```bib
-@misc{zaidi2022pretraining,
-      title={Pre-training via Denoising for Molecular Property Prediction}, 
+@inproceedings{
+      zaidi2023pretraining,
+      title={Pre-training via Denoising for Molecular Property Prediction},
       author={Sheheryar Zaidi and Michael Schaarschmidt and James Martens and Hyunjik Kim and Yee Whye Teh and Alvaro Sanchez-Gonzalez and Peter Battaglia and Razvan Pascanu and Jonathan Godwin},
-      year={2022},
-      eprint={2206.00133},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+      booktitle={International Conference on Learning Representations},
+      year={2023},
+      url={https://openreview.net/forum?id=tYIMtogyee}
 }
 ```
