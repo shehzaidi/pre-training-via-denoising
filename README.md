@@ -2,7 +2,7 @@
 
 This is the official implementation for the paper:
 
-[Pre-training via Denoising for Molecular Property Prediction](https://arxiv.org/abs/2206.00133)
+[Pre-training via Denoising for Molecular Property Prediction](https://arxiv.org/abs/2206.00133) (Spotlight @ ICLR 2023)
 
 by [Sheheryar Zaidi*](https://shehzaidi.github.io/), [Michael Schaarschmidt*](https://www.michaelschaarschmidt.com/), [James Martens](http://www.cs.toronto.edu/~jmartens/), [Hyunjik Kim](https://hyunjik11.github.io/), [Yee Whye Teh](http://www.stats.ox.ac.uk/~teh/), [Alvaro Sanchez Gonzalez](https://scholar.google.co.uk/citations?user=d1oQ8NcAAAAJ&hl=en), [Peter Battaglia](https://scholar.google.com/citations?user=nQ7Ij30AAAAJ&hl=en), [Razvan Pascanu](https://sites.google.com/corp/view/razp), [Jonathan Godwin](https://scholar.google.co.uk/citations?user=TEYiFIsAAAAJ&hl=en&oi=sra).
 
